@@ -3,10 +3,15 @@
 Перенос Django проекта Blogicum (6 спринт) на FastAPI.
 
 ## Технологии
-- FastAPI
-- SQLAlchemy
-- Pydantic
-- SQLite
+
+- **FastAPI** — современный веб-фреймворк
+- **SQLAlchemy** — ORM для работы с БД
+- **Pydantic** — валидация данных
+- **SQLite** — база данных (как в Django проекте)
 
 ## Установка и запуск
-(будет дополняться)
+
+1. **Клонировать репозиторий**
+   ```bash
+   git clone <url-вашего-репозитория>
+   cd fastapi-blogicum
