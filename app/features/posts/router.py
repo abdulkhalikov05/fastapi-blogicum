@@ -5,13 +5,13 @@ import os
 import shutil
 from datetime import datetime
 
-from app import crud, schemas
-from app.database import get_db
-from app.dependencies import get_current_user, get_pagination
+from app.core.database import get_db
+from app.features.auth.dependencies import get_current_user, get_current_active_user
+from app.features.auth.schemas import User
+from app.features.posts import crud, schemas
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
-# Создаем папку для загрузки изображений
 UPLOAD_DIR = "uploads/images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -24,17 +24,13 @@ async def read_posts(
     author: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Получить список всех постов
-    Аналог index() и category_posts() из Django
-    """
+    """Получить список всех постов (аналог index в Django)"""
     posts = crud.get_posts(
-        db,
-        skip=skip,
+        db, 
+        skip=skip, 
         limit=limit,
         category_slug=category,
-        author_id=author,
-        published_only=True  # Только опубликованные
+        author_id=author
     )
     return posts
 
@@ -43,32 +39,16 @@ async def read_posts(
 async def read_post(
     post_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[schemas.User] = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user)
 ):
-    """
-    Получить детальную информацию о посте
-    Аналог post_detail() из Django
-    """
-    # Определяем, нужно ли показывать неопубликованные посты
+    """Получить детальную информацию о посте (аналог post_detail)"""
+    # Проверяем, автор ли это (чтобы показывать черновики)
     check_author = current_user is not None
     author_id = current_user.id if current_user else None
-
-    post = crud.get_post(
-        db,
-        post_id,
-        check_author=check_author,
-        author_id=author_id
-    )
-
+    
+    post = crud.get_post(db, post_id, check_author=check_author, author_id=author_id)
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пост не найден"
-        )
-
-    # Загружаем комментарии к посту
-    post.comments = crud.get_comments(db, post_id)
-
+        raise HTTPException(status_code=404, detail="Post not found")
     return post
 
 
@@ -82,24 +62,17 @@ async def create_post(
     is_published: bool = Form(True),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Создать новый пост
-    Аналог create_post() из Django
-    """
+    """Создать новый пост (аналог create_post в Django)"""
     # Сохраняем изображение если есть
     image_path = None
-    if image and image.filename:
-        # Генерируем уникальное имя файла
-        file_extension = os.path.splitext(image.filename)[1]
-        file_name = f"{datetime.now().timestamp()}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, file_name)
-
+    if image:
+        file_path = f"{UPLOAD_DIR}/{image.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
         image_path = file_path
-
+    
     post_data = schemas.PostCreate(
         title=title,
         text=text,
@@ -108,7 +81,7 @@ async def create_post(
         location_id=location_id,
         is_published=is_published
     )
-
+    
     return crud.create_post(db, post_data, current_user.id, image_path)
 
 
@@ -123,42 +96,25 @@ async def update_post(
     is_published: bool = Form(True),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Обновить пост
-    Аналог edit_post() из Django
-    """
-    # Проверяем существование поста и права доступа
+    """Обновить пост (аналог edit_post в Django)"""
+    # Проверяем, что пост существует и принадлежит текущему пользователю
     post = crud.get_post(db, post_id, check_author=True, author_id=current_user.id)
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пост не найден"
-        )
-
+        raise HTTPException(status_code=404, detail="Post not found")
+    
     if post.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Нет прав для редактирования этого поста"
-        )
-
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
     # Сохраняем новое изображение если есть
     image_path = None
-    if image and image.filename:
-        # Удаляем старое изображение если есть
-        if post.image and os.path.exists(post.image):
-            os.remove(post.image)
-
-        # Сохраняем новое
-        file_extension = os.path.splitext(image.filename)[1]
-        file_name = f"{datetime.now().timestamp()}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, file_name)
-
+    if image:
+        file_path = f"{UPLOAD_DIR}/{image.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
         image_path = file_path
-
+    
     post_update = schemas.PostUpdate(
         title=title,
         text=text,
@@ -167,7 +123,7 @@ async def update_post(
         location_id=location_id,
         is_published=is_published
     )
-
+    
     return crud.update_post(db, post_id, post_update, image_path)
 
 
@@ -175,28 +131,20 @@ async def update_post(
 async def delete_post(
     post_id: int,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """
-    Удалить пост
-    Аналог delete_post() из Django
-    """
+    """Удалить пост (аналог delete_post в Django)"""
+    # Проверяем, что пост существует и принадлежит текущему пользователю
     post = crud.get_post(db, post_id, check_author=True, author_id=current_user.id)
     if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пост не найден"
-        )
-
+        raise HTTPException(status_code=404, detail="Post not found")
+    
     if post.author_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Нет прав для удаления этого поста"
-        )
-
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
     # Удаляем изображение если есть
     if post.image and os.path.exists(post.image):
         os.remove(post.image)
-
+    
     crud.delete_post(db, post_id)
     return None

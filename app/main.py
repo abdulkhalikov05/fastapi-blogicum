@@ -1,19 +1,20 @@
-# -*- coding: utf-8 -*-
 """
 Главный файл FastAPI приложения Blogicum
 Перенос с Django на FastAPI
 """
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 import os
 
-# Импортируем свои модули
-from app.database import engine, Base, get_db  # ВАЖНО: добавили get_db!
-from app.routers import posts, comments, categories, locations, users
-from app import crud
+# Импортируем свои модули (исправленные пути)
+from app.core.database import engine, Base
+from app.features.posts.router import router as posts_router
+from app.features.comments.router import router as comments_router
+from app.features.categories.router import router as categories_router
+from app.features.locations.router import router as locations_router
+from app.features.auth.router import router as auth_router
 
 # Создаем таблицы в базе данных
 print("Создаю таблицы в базе данных...")
@@ -25,13 +26,11 @@ os.makedirs("uploads/images", exist_ok=True)
 os.makedirs("uploads/avatars", exist_ok=True)
 print("Папки для загрузок созданы")
 
-# Создаем экземпляр FastAPI приложения
+# Создаем приложение
 app = FastAPI(
     title="Blogicum API",
-    description="API для блог-платформы Blogicum. Перенос с Django на FastAPI",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    description="API для блог-платформы Blogicum",
+    version="1.0.0"
 )
 
 # Настройка CORS
@@ -43,23 +42,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем все роутеры
-app.include_router(posts.router)
-app.include_router(comments.router)
-app.include_router(categories.router)
-app.include_router(locations.router)
-app.include_router(users.router)
+# Подключаем роутеры
+app.include_router(posts_router)
+app.include_router(comments_router)
+app.include_router(categories_router)
+app.include_router(locations_router)
+app.include_router(auth_router)
 
-# Раздача статических файлов
+# Для статических файлов
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/")
 async def root():
     return {
-        "message": "Добро пожаловать в Blogicum API!",
-        "documentation": "/docs",
-        "version": "1.0.0"
+        "message": "Добро пожаловать в Blogicum API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "endpoints": {
+            "posts": "/posts",
+            "comments": "/comments",
+            "categories": "/categories",
+            "locations": "/locations",
+            "auth": "/auth"
+        }
     }
 
 
@@ -68,30 +74,4 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected"
-    }
-
-
-@app.get("/stats")
-async def get_stats(db: Session = Depends(get_db)):  # ← теперь get_db определена!
-    """
-    Статистика по блогу
-    """
-    posts_count = len(crud.get_posts(db, limit=10000, published_only=False))
-    categories_count = len(crud.get_categories(db, limit=1000, published_only=False))
-    users_count = len(crud.get_users(db, limit=1000))
-    
-    return {
-        "posts": posts_count,
-        "categories": categories_count,
-        "users": users_count,
-    }
-
-
-@app.get("/info")
-async def info():
-    return {
-        "project": "Blogicum",
-        "framework": "FastAPI",
-        "original": "Django проект с 6 спринта",
-        "endpoints": "/docs"
     }
