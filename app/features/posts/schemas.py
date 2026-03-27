@@ -1,12 +1,11 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
-from typing import Optional, List, ForwardRef
+from typing import Optional, List
+
 from app.features.auth.schemas import User
 from app.features.categories.schemas import Category
 from app.features.locations.schemas import Location
-
-# Для избежания циклических ссылок
-Comment = ForwardRef('Comment')
+from app.features.comments.schemas import Comment
 
 
 class PostBase(BaseModel):
@@ -19,10 +18,12 @@ class PostBase(BaseModel):
 
 
 class PostCreate(PostBase):
+    """Схема для создания поста"""
     pass
 
 
 class PostUpdate(BaseModel):
+    """Схема для обновления поста"""
     title: Optional[str] = None
     text: Optional[str] = None
     pub_date: Optional[datetime] = None
@@ -30,23 +31,28 @@ class PostUpdate(BaseModel):
     category_id: Optional[int] = None
     location_id: Optional[int] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class Post(PostBase):
+    """Основная схема поста"""
     id: int
     created_at: datetime
     author_id: int
-    image: Optional[str] = None
-    
+    image: Optional[str] = Field(
+        default=None,
+        description="Имя файла изображения или null, если изображения нет",
+        examples=[None, "20260402_182413_sunset.jpg"]
+    )
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class PostWithRelations(Post):
+    """Пост со всеми связями"""
     author: User
     category: Category
     location: Optional[Location] = None
-    comments: List['Comment'] = []
+    comments: List[Comment] = []
 
-
-# Импортируем Comment после объявления
-from app.features.comments.schemas import Comment
-PostWithRelations.model_rebuild()
+    model_config = ConfigDict(from_attributes=True)

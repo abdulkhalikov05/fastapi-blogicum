@@ -1,5 +1,7 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
-from typing import Optional, List
+
 from app.features.auth import models, schemas
 
 
@@ -9,7 +11,7 @@ class UserRepository:
     def __init__(self, db: Session):
         self.db = db
     
-    def get(self, user_id: int) -> Optional[models.User]:
+    def get(self, user_id: int) -> models.User | None:
         """Получить пользователя по ID"""
         return self.db.query(models.User).filter(models.User.id == user_id).first()
     
@@ -21,7 +23,7 @@ class UserRepository:
         """Получить пользователя по email"""
         return self.db.query(models.User).filter(models.User.email == email).first()
     
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[models.User]:
+    def get_all(self, skip: int = 0, limit: int = 100) -> list[models.User]:
         """Получить список всех пользователей"""
         return self.db.query(models.User).offset(skip).limit(limit).all()
     
