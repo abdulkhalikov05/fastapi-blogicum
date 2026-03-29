@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, List
 
-from app.features.auth.schemas import User
 from app.features.categories.schemas import Category
 from app.features.locations.schemas import Location
 from app.features.comments.schemas import Comment
@@ -50,7 +49,6 @@ class Post(PostBase):
 
 class PostWithRelations(Post):
     """Пост со всеми связями"""
-    author: User
     category: Category
     location: Optional[Location] = None
     comments: List[Comment] = []

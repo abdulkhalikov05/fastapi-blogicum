@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.features.auth.dependencies import get_current_active_user
-from app.features.auth.schemas import User
 from app.features.locations import crud, schemas
 
 router = APIRouter(prefix="/locations", tags=["locations"])
@@ -36,7 +34,6 @@ async def read_location(
 async def create_location(
     location: schemas.LocationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Создать местоположение (только для админов)"""
     return crud.create_location(db, location)
@@ -47,7 +44,6 @@ async def update_location(
     location_id: int,
     location_update: schemas.LocationUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Обновить местоположение (только для админов)"""
     location = crud.get_location(db, location_id)
@@ -61,7 +57,6 @@ async def update_location(
 async def delete_location(
     location_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Удалить местоположение (только для админов)"""
     location = crud.get_location(db, location_id)

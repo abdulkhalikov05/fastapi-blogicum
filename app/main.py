@@ -14,7 +14,6 @@ from app.features.posts.router import router as posts_router
 from app.features.comments.router import router as comments_router
 from app.features.categories.router import router as categories_router
 from app.features.locations.router import router as locations_router
-from app.features.auth.router import router as auth_router
 
 # Создаем таблицы в базе данных
 print("Создаю таблицы в базе данных...")
@@ -47,7 +46,6 @@ app.include_router(posts_router)
 app.include_router(comments_router)
 app.include_router(categories_router)
 app.include_router(locations_router)
-app.include_router(auth_router)
 
 # Для статических файлов
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
@@ -64,7 +62,6 @@ async def root():
             "comments": "/comments",
             "categories": "/categories",
             "locations": "/locations",
-            "auth": "/auth"
         }
     }
 

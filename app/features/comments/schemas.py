@@ -1,7 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional
-from app.features.auth.schemas import User
 
 
 class CommentBase(BaseModel):
@@ -25,6 +24,6 @@ class Comment(CommentBase):
     
     model_config = ConfigDict(from_attributes=True)
 
-
 class CommentWithAuthor(Comment):
-    author: User
+    """Схема комментария с информацией об авторе"""
+    author_id: int

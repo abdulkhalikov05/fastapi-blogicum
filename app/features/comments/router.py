@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.features.auth.dependencies import get_current_active_user
-from app.features.auth.schemas import User
 from app.features.comments import crud, schemas
 from app.features.posts import crud as post_crud
 
@@ -25,32 +23,28 @@ async def read_comments(
 @router.post("/", response_model=schemas.Comment, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     comment: schemas.CommentCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
-    """Создать комментарий (аналог add_comment)"""
+    """Создать комментарий"""
     # Проверяем, что пост существует
     post = post_crud.get_post(db, comment.post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     
-    return crud.create_comment(db, comment, current_user.id)
+    # Временно используем author_id = 1
+    return crud.create_comment(db, comment, 1)
 
 
 @router.put("/{comment_id}", response_model=schemas.Comment)
 async def update_comment(
     comment_id: int,
     comment_update: schemas.CommentUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
-    """Обновить комментарий (аналог edit_comment)"""
+    """Обновить комментарий"""
     comment = crud.get_comment(db, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
-    
-    if comment.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
     
     return crud.update_comment(db, comment_id, comment_update)
 
@@ -58,16 +52,12 @@ async def update_comment(
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     comment_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
-    """Удалить комментарий (аналог delete_comment)"""
+    """Удалить комментарий"""
     comment = crud.get_comment(db, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
-    
-    if comment.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not enough permissions")
     
     crud.delete_comment(db, comment_id)
     return None

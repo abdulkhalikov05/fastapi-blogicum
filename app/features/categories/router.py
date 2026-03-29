@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.features.auth.dependencies import get_current_active_user
-from app.features.auth.schemas import User
 from app.features.categories import crud, schemas
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -36,7 +34,6 @@ async def read_category_by_slug(
 async def create_category(
     category: schemas.CategoryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Создать категорию (только для админов)"""
     # В реальном проекте здесь проверка на admin
@@ -48,7 +45,6 @@ async def update_category(
     category_id: int,
     category_update: schemas.CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Обновить категорию (только для админов)"""
     category = crud.get_category(db, category_id)
@@ -62,7 +58,6 @@ async def update_category(
 async def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)  # Только для админов
 ):
     """Удалить категорию (только для админов)"""
     category = crud.get_category(db, category_id)

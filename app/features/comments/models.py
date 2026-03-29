@@ -10,9 +10,7 @@ class Comment(PublishedBaseModel):
     text = Column(Text, nullable=False)
 
     # Внешние ключи
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
 
     # Связи
-    author = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
