@@ -11,6 +11,10 @@ class Comment(PublishedBaseModel):
 
     # Внешние ключи
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    author_id = Column(Integer, nullable=False)
 
     # Связи
     post = relationship("Post", back_populates="comments")
+
+    def __repr__(self):
+        return f"<Comment {self.id} on post {self.post_id}>"

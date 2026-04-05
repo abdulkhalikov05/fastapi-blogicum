@@ -1,14 +1,16 @@
 """
 Главный файл FastAPI приложения Blogicum
-Перенос с Django на FastAPI
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError as PydanticValidationError
+from datetime import datetime
 import os
 
-# Импортируем свои модули (исправленные пути)
 from app.core.database import engine, Base
 from app.features.posts.router import router as posts_router
 from app.features.comments.router import router as comments_router
@@ -32,6 +34,57 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+# Обработчик ошибок валидации Pydantic
+@app.exception_handler(PydanticValidationError)
+async def pydantic_validation_handler(request: Request, exc: PydanticValidationError):
+    """Обработчик ошибок валидации Pydantic"""
+    errors = []
+    for error in exc.errors():
+        field = error["loc"][-1] if error["loc"] else "unknown"
+        msg = error["msg"]
+        
+        # Преобразуем datetime в строку для JSON
+        input_value = error.get("input")
+        if isinstance(input_value, datetime):
+            input_value = input_value.isoformat()
+        
+        errors.append({
+            "field": field,
+            "message": msg,
+            "type": error["type"],
+            "input": input_value
+        })
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": "Ошибка валидации данных",
+            "errors": errors
+        }
+    )
+
+
+# Обработчик ошибок валидации запроса
+@app.exception_handler(RequestValidationError)
+async def request_validation_handler(request: Request, exc: RequestValidationError):
+    """Обработчик ошибок валидации запроса"""
+    errors = []
+    for error in exc.errors():
+        field = error["loc"][-1] if error["loc"] else "unknown"
+        errors.append({
+            "field": field,
+            "message": error["msg"],
+            "type": error["type"]
+        })
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": "Ошибка валидации запроса",
+            "errors": errors
+        }
+    )
+
+
 # Настройка CORS
 app.add_middleware(
     CORSMiddleware,
@@ -41,11 +94,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Подключаем роутеры
 app.include_router(posts_router)
 app.include_router(comments_router)
 app.include_router(categories_router)
 app.include_router(locations_router)
+
 
 # Для статических файлов
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
