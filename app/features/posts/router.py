@@ -1,14 +1,11 @@
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     status,
     UploadFile,
     File,
     Form,
 )
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Annotated, Union
 from pathlib import Path
@@ -16,8 +13,11 @@ import os
 from datetime import datetime
 
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, DatabaseError
-from app.features.posts import crud, schemas
+from app.core.dependencies import get_current_user
+from app.features.auth.models import User
+from app.features.posts import schemas
+from app.features.posts.repository import PostRepository
+from app.features.posts.service import PostService
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -33,42 +33,31 @@ async def save_uploaded_image(image: Union[UploadFile, str, None]) -> Optional[s
         return None
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недопустимый тип изображения. Разрешено: {ALLOWED_IMAGE_TYPES}",
-        )
+        raise Exception("Недопустимый тип изображения")
 
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{os.path.basename(image.filename)}"
-        file_path = UPLOAD_DIR / safe_filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{timestamp}_{os.path.basename(image.filename)}"
+    file_path = UPLOAD_DIR / safe_filename
 
-        content_size = 0
-        with open(file_path, "wb") as buffer:
-            while chunk := await image.read(1024 * 1024):
-                content_size += len(chunk)
-                if content_size > MAX_FILE_SIZE:
-                    file_path.unlink(missing_ok=True)
-                    raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 10 МБ)")
-                buffer.write(chunk)
+    content_size = 0
+    with open(file_path, "wb") as buffer:
+        while chunk := await image.read(1024 * 1024):
+            content_size += len(chunk)
+            if content_size > MAX_FILE_SIZE:
+                file_path.unlink(missing_ok=True)
+                raise Exception("Файл слишком большой")
+            buffer.write(chunk)
 
-        return safe_filename
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Ошибка при сохранении изображения: {e}")
-        return None
+    return safe_filename
 
 
 def delete_old_image(filename: Optional[str]) -> None:
     if not filename:
         return
+
     file_path = UPLOAD_DIR / filename
-    try:
-        if file_path.exists():
-            file_path.unlink()
-    except Exception as e:
-        print(f"Не удалось удалить изображение {filename}: {e}")
+    if file_path.exists():
+        file_path.unlink()
 
 
 # ====================== CREATE ======================
@@ -86,23 +75,23 @@ async def create_post(
     is_published: Annotated[bool, Form()] = True,
     image: Annotated[Union[UploadFile, str, None], File()] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Создать новый пост"""
-    try:
-        image_path = await save_uploaded_image(image)
+    repo = PostRepository(db)
+    service = PostService(repo)
 
-        post_data = schemas.PostCreate(
-            title=title,
-            text=text,
-            pub_date=pub_date,
-            category_id=category_id,
-            location_id=location_id,
-            is_published=is_published,
-        )
+    image_path = await save_uploaded_image(image)
 
-        return crud.create_post(db, post_data, author_id=1, image_path=image_path)
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=e.message)
+    post_data = schemas.PostCreate(
+        title=title,
+        text=text,
+        pub_date=pub_date,
+        category_id=category_id,
+        location_id=location_id,
+        is_published=is_published,
+    )
+
+    return service.create_post(post_data, author_id=current_user.id, image_path=image_path)
 
 
 # ====================== UPDATE ======================
@@ -121,31 +110,28 @@ async def update_post(
     is_published: Annotated[bool, Form()] = True,
     image: Annotated[Union[UploadFile, str, None], File()] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Обновить пост"""
-    try:
-        post = crud.get_post(db, post_id, check_author=False, author_id=None)
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
+    repo = PostRepository(db)
+    service = PostService(repo)
 
-        image_path = await save_uploaded_image(image)
-        if image_path and getattr(post, "image", None):
-            delete_old_image(post.image)
+    image_path = await save_uploaded_image(image)
 
-        post_update = schemas.PostUpdate(
-            title=title,
-            text=text,
-            pub_date=pub_date,
-            category_id=category_id,
-            location_id=location_id,
-            is_published=is_published,
-        )
+    post_update = schemas.PostUpdate(
+        title=title,
+        text=text,
+        pub_date=pub_date,
+        category_id=category_id,
+        location_id=location_id,
+        is_published=is_published,
+    )
 
-        return crud.update_post(db, post_id, post_update, image_path)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message)
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=e.message)
+    return service.update_post(
+        post_id=post_id,
+        post_data=post_update,
+        user_id=current_user.id,
+        image_path=image_path,
+    )
 
 
 # ====================== DELETE ======================
@@ -153,19 +139,13 @@ async def update_post(
 async def delete_post(
     post_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    try:
-        post = crud.get_post(db, post_id, check_author=False, author_id=None)
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
+    repo = PostRepository(db)
+    service = PostService(repo)
 
-        delete_old_image(getattr(post, "image", None))
-        crud.delete_post(db, post_id)
-        return None
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=e.message)
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=e.message)
+    service.delete_post(post_id, user_id=current_user.id)
+    return None
 
 
 # ====================== GET ======================
@@ -173,17 +153,12 @@ async def delete_post(
 async def read_posts(
     skip: int = 0,
     limit: int = 10,
-    category: Optional[str] = None,
-    author: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    try:
-        posts = crud.get_posts(
-            db, skip=skip, limit=limit, category_slug=category, author_id=author
-        )
-        return posts
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=e.message)
+    repo = PostRepository(db)
+    service = PostService(repo)
+
+    return service.get_posts(skip=skip, limit=limit)
 
 
 @router.get("/{post_id}", response_model=schemas.PostWithRelations)
@@ -191,10 +166,7 @@ async def read_post(
     post_id: int,
     db: Session = Depends(get_db),
 ):
-    try:
-        post = crud.get_post(db, post_id, check_author=False, author_id=None)
-        if not post:
-            raise HTTPException(status_code=404, detail="Post not found")
-        return post
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail=e.message)
+    repo = PostRepository(db)
+    service = PostService(repo)
+
+    return service.get_post(post_id)

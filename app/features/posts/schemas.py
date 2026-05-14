@@ -49,16 +49,6 @@ class PostBase(BaseModel):
             raise ValueError('ID местоположения должен быть положительным числом или null')
         return v
 
-    @field_validator('pub_date')
-    @classmethod
-    def validate_pub_date(cls, v: datetime) -> datetime:
-        now = datetime.now(timezone.utc)
-        if v.tzinfo is None:
-            v = v.replace(tzinfo=timezone.utc)
-        if v < now:
-            raise ValueError('Дата публикации не может быть в прошлом')
-        return v
-
 
 class PostCreate(PostBase):
     """Схема для создания поста"""
@@ -98,18 +88,7 @@ class PostUpdate(BaseModel):
             return v.strip()
         return v
 
-    @field_validator('pub_date')
-    @classmethod
-    def validate_pub_date(cls, v: Optional[datetime]) -> Optional[datetime]:
-        if v is not None:
-            now = datetime.now(timezone.utc)
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=timezone.utc)
-            if v < now:
-                raise ValueError('Дата публикации не может быть в прошлом')
-        return v
-
-    model_config = ConfigDict(from_attributes=True)
+   
 
 
 class Post(PostBase):

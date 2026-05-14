@@ -5,10 +5,12 @@ from typing import List
 from app.core.database import get_db
 from app.core.exceptions import NotFoundError, DatabaseError, ValidationError
 from app.features.categories import crud, schemas
+from app.core.dependencies import get_current_admin
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
+# ====================== PUBLIC ======================
 @router.get("/", response_model=List[schemas.Category])
 async def read_categories(
     skip: int = 0,
@@ -29,16 +31,22 @@ async def read_category_by_slug(
     try:
         category = crud.get_category_by_slug(db, slug)
         if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
+            raise HTTPException(status_code=404, detail="Категория не найдена")
         return category
     except DatabaseError as e:
         raise HTTPException(status_code=500, detail=e.message)
 
 
-@router.post("/", response_model=schemas.Category, status_code=status.HTTP_201_CREATED)
+# ====================== ADMIN ONLY ======================
+@router.post(
+    "/",
+    response_model=schemas.Category,
+    status_code=status.HTTP_201_CREATED
+)
 async def create_category(
     category: schemas.CategoryCreate,
     db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
 ):
     try:
         return crud.create_category(db, category)
@@ -53,11 +61,12 @@ async def update_category(
     category_id: int,
     category_update: schemas.CategoryUpdate,
     db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
 ):
     try:
         category = crud.get_category(db, category_id)
         if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
+            raise HTTPException(status_code=404, detail="Категория не найдена")
 
         return crud.update_category(db, category_id, category_update)
     except NotFoundError as e:
@@ -70,11 +79,12 @@ async def update_category(
 async def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
 ):
     try:
         category = crud.get_category(db, category_id)
         if not category:
-            raise HTTPException(status_code=404, detail="Category not found")
+            raise HTTPException(status_code=404, detail="Категория не найдера")
 
         crud.delete_category(db, category_id)
         return None

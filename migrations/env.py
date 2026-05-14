@@ -1,37 +1,38 @@
 from logging.config import fileConfig
 import os
-import sys
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
 
+from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Добавляем проект в путь
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from app.core.database import Base
+from app.core.config import settings
 
-# Импортируем все модели
-from app.features.posts.models import Post
-from app.features.categories.models import Category
-from app.features.locations.models import Location
-from app.features.comments.models import Comment
-
-target_metadata = Base.metadata
-
+# Alembic config
 config = context.config
 
+# logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
+from app.features.posts import models
+from app.features.categories import models 
+from app.features.locations import models  
+from app.features.comments import models 
+
+# metadata
+target_metadata = Base.metadata
+
+
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
+    url = settings.DATABASE_URL
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=True,
     )
 
     with context.begin_transaction():
@@ -39,9 +40,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        {"sqlalchemy.url": settings.DATABASE_URL},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
@@ -50,10 +50,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            # Эти строки решают проблему с SQLite
             compare_type=True,
             compare_server_default=True,
-            render_as_batch=True,
         )
 
         with context.begin_transaction():
